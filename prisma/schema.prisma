@@ -1,0 +1,251 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         String   @default("VIEW") // "ADMIN", "ENTRY USER", "VIEW"
+  status       String   @default("Active") // "Active", "Inactive"
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  createdShipments Shipment[]         @relation("ShipmentCreatedBy")
+  updatedShipments Shipment[]         @relation("ShipmentUpdatedBy")
+  activityLogs     ActivityLog[]
+  fieldConfigs     FieldConfig[]
+  masterData       MasterData[]
+  upcoming         UpcomingShipment[]
+  lcs              LetterOfCredit[]
+  tts              TelegraphicTransfer[]
+  templates        ShipmentTemplate[]
+
+  @@map("users")
+}
+
+model Shipment {
+  id             Int       @id @default(autoincrement())
+  no             Int?      @unique
+  bookingDate    DateTime  @default(now()) @map("booking_date")
+  refNumber      String?   @unique @map("ref_number")
+  customerName   String?   @map("customer_name")
+  paymentType    String?   @map("payment_type")
+  payRefNo       String?   @map("pay_ref_no")
+  invoiceNo      String?   @map("invoice_no")
+  packageType    String?   @map("package_type")
+  hsCode         String?   @map("hs_code")
+  elementsCount  Int?      @map("elements_count")
+  primaryQtyNw   Decimal?  @map("primary_qty_nw") @db.Decimal(14, 2)
+  secondaryQtyGw Decimal?  @map("secondary_qty_gw") @db.Decimal(14, 2)
+  shipmentValue  Decimal?  @map("shipment_value") @db.Decimal(14, 2)
+  shipmentMode   String?   @map("shipment_mode")
+  incoterm       String?   @map("incoterm")
+  cbm            Decimal?  @db.Decimal(10, 2)
+  delFrom        String?   @map("del_from")
+  delTo          String?   @map("del_to")
+  blAwb          String?   @map("bl_awb")
+  port           String?   @map("port")
+  cha            String?   @map("cha")
+  cusdc          String?
+  cusdcDate      DateTime? @map("cusdc_date")
+  forwarderType  String?   @map("forwarder_type")
+  forwarder      String?
+  quotationValue Decimal?  @map("quotation_value") @db.Decimal(14, 2)
+  delStatus      String?   @default("Pending") @map("del_status")
+  paymentStatus  String?   @default("Pending") @map("payment_status")
+  statusFlag     String    @default("Active") @map("status_flag")
+  remark         String?   @db.Text
+  userName       String?   @map("user_name")
+  customData     Json?     @map("custom_data")
+  createdBy      Int?      @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedBy      Int?      @map("updated_by")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  creator  User?             @relation("ShipmentCreatedBy", fields: [createdBy], references: [id])
+  updater  User?             @relation("ShipmentUpdatedBy", fields: [updatedBy], references: [id])
+  invoices ShipmentInvoice[]
+
+  @@index([delStatus, bookingDate])
+  @@index([customerName])
+  @@index([refNumber])
+  @@index([paymentType])
+  @@index([shipmentMode])
+  @@index([forwarder])
+  @@index([bookingDate])
+  @@map("shipments")
+}
+
+model ShipmentInvoice {
+  id             Int      @id @default(autoincrement())
+  shipmentId     Int      @map("shipment_id")
+  lineNo         Int      @default(1) @map("line_no")
+  invoiceNo      String?  @map("invoice_no")
+  elementsCount  Int?     @map("elements_count")
+  primaryQtyNw   Decimal? @map("primary_qty_nw") @db.Decimal(14, 2)
+  secondaryQtyGw Decimal? @map("secondary_qty_gw") @db.Decimal(14, 2)
+  shipmentValue  Decimal? @map("shipment_value") @db.Decimal(14, 2)
+  customData     Json?    @map("custom_data")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+  @@map("shipment_invoices")
+}
+
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  action    String
+  recordId  String?  @map("record_id")
+  oldValue  String?  @map("old_value") @db.Text
+  newValue  String?  @map("new_value") @db.Text
+  timestamp DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([timestamp])
+  @@index([userId])
+  @@map("activity_logs")
+}
+
+model MasterData {
+  id        Int      @id @default(autoincrement())
+  category  String
+  value     String
+  status    String   @default("Active")
+  module    String   @default("SHIPMENT") // "SHIPMENT", "LC", "UPCOMING"
+  createdBy Int?     @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  creator User? @relation(fields: [createdBy], references: [id])
+
+  @@index([category, module, status])
+  @@map("master_data")
+}
+
+model FieldConfig {
+  id              Int      @id @default(autoincrement())
+  fieldKey        String   @map("field_key")
+  label           String
+  type            String   // "Text", "Number", "Decimal", "Date", "Dropdown", "Long Text"
+  isCustom        Boolean  @default(false) @map("is_custom")
+  isActive        Boolean  @default(true) @map("is_active")
+  isRequired      Boolean  @default(false) @map("is_required")
+  displayOrder    Int      @map("display_order")
+  optionsCategory String?  @map("options_category")
+  fieldScope      String   @default("FIXED") @map("field_scope") // "FIXED", "LINE"
+  module          String   @default("SHIPMENT")
+  createdBy       Int?     @map("created_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  creator User? @relation(fields: [createdBy], references: [id])
+
+  @@unique([fieldKey, module], name: "field_key_module")
+  @@map("field_configs")
+}
+
+model UpcomingShipment {
+  id            Int      @id @default(autoincrement())
+  estimateDate  DateTime @map("estimate_date") @db.Date
+  customerName  String?  @map("customer_name")
+  shipmentMode  String?  @map("shipment_mode")
+  containerType String?  @map("container_type")
+  approxQty     Decimal? @map("approx_qty") @db.Decimal(14, 2)
+  cbm           Decimal? @db.Decimal(10, 2)
+  remarks       String?  @db.Text
+  status        String   @default("Pending")
+  customData    Json?    @map("custom_data")
+  createdBy     Int?     @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  creator User? @relation(fields: [createdBy], references: [id])
+
+  @@index([estimateDate])
+  @@index([status])
+  @@map("upcoming_shipments")
+}
+
+model LetterOfCredit {
+  id              Int       @id @default(autoincrement())
+  lcNo            String    @unique @map("lc_no")
+  customerName    String?   @map("customer_name")
+  bankName        String?   @map("bank_name")
+  proformaInvoice String?   @map("proforma_invoice")
+  originalValue   Decimal   @map("original_value") @db.Decimal(14, 2)
+  issueDate       DateTime? @map("issue_date") @db.Date
+  expiryDate      DateTime? @map("expiry_date") @db.Date
+  status          String    @default("Active")
+  notes           String?   @db.Text
+  createdBy       Int?      @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  creator User? @relation(fields: [createdBy], references: [id])
+
+  @@index([customerName])
+  @@index([status])
+  @@map("letters_of_credit")
+}
+
+model TelegraphicTransfer {
+  id              Int       @id @default(autoincrement())
+  ttNo            String    @unique @map("tt_no")
+  customerName    String?   @map("customer_name")
+  bankName        String?   @map("bank_name")
+  proformaInvoice String?   @map("proforma_invoice")
+  originalValue   Decimal   @map("original_value") @db.Decimal(14, 2)
+  issueDate       DateTime? @map("issue_date") @db.Date
+  expiryDate      DateTime? @map("expiry_date") @db.Date
+  status          String    @default("Active")
+  notes           String?   @db.Text
+  createdBy       Int?      @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  creator User? @relation(fields: [createdBy], references: [id])
+
+  @@index([customerName])
+  @@index([status])
+  @@map("telegraphic_transfers")
+}
+
+model ShipmentTemplate {
+  id           Int      @id @default(autoincrement())
+  templateName String   @map("template_name")
+  templateData Json     @map("template_data")
+  createdBy    Int      @map("created_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  creator User @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("shipment_templates")
+}
+
+model DashboardWidget {
+  id           Int     @id @default(autoincrement())
+  widgetKey    String  @unique @map("widget_key")
+  title        String
+  type         String  // "kpi", "strip", "chart_bar", "chart_pie", "chart_doughnut", "list", "chart_line"
+  width        String  @default("col-span-12")
+  height       String  @default("auto")
+  displayOrder Int     @default(0) @map("display_order")
+  isVisible    Boolean @default(true) @map("is_visible")
+  dataColumn   String? @map("data_column")
+  metric       String? @default("count") // "count", "value", "qty", "cbm", "nw"
+
+  @@map("dashboard_widgets")
+}
