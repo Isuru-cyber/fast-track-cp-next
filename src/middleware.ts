@@ -5,10 +5,11 @@ import { verifySessionToken, COOKIE_NAME } from '@/lib/jwt';
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Static files and public assets
+  // Static files, public assets and public endpoints
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api/auth/login') ||
+    pathname.startsWith('/api/db-check') ||
     pathname.startsWith('/assets') ||
     pathname.includes('.')
   ) {
