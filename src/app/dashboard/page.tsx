@@ -6,8 +6,14 @@ import { getCachedMasterData, getCachedSystemConfig } from '@/lib/cache';
 import Shell from '@/components/layout/Shell';
 import {
   TrendChart,
-  ForwarderMatrixChart,
-  IncotermDonutChart,
+  InteractiveIncotermChart,
+  InteractiveForwarderChart,
+  InteractiveModeChart,
+  InteractiveCustomerChart,
+  IncotermDataMap,
+  ForwarderRecord,
+  ModeRecord,
+  CustomerRecord,
 } from '@/components/dashboard/DashboardCharts';
 import Link from 'next/link';
 
@@ -174,13 +180,12 @@ export default async function DashboardPage({ searchParams }: Props) {
   let inTransitCount = 0;
   let deliveredCount = 0;
 
-  // Analytical Distributions
-  const trendMap: Record<string, { label: string; cbm: number; value: number }> = {};
-  const forwarderMap: Record<string, { count: number; cbm: number; value: number }> = {};
-  const incotermMap: Record<string, number> = {};
-  const modeMap: Record<string, number> = { 'Sea FCL': 0, 'Sea LCL': 0, Air: 0, Other: 0 };
-  const customerSpendMap: Record<string, { count: number; value: number; cbm: number }> = {};
-  const portMap: Record<string, number> = {};
+  // Unified Multi-metric Distributions
+  const trendMap: Record<string, { label: string; cbm: number; value: number; count: number }> = {};
+  const forwarderMap: Record<string, { count: number; cbm: number; kg: number; value: number }> = {};
+  const incotermMap: Record<string, { count: number; cbm: number; kg: number; value: number }> = {};
+  const modeMap: Record<string, { count: number; cbm: number; kg: number; value: number }> = {};
+  const customerMap: Record<string, { count: number; cbm: number; kg: number; value: number }> = {};
 
   for (const s of shipments) {
     const sCbm = Number(s.cbm || 0);
@@ -203,73 +208,95 @@ export default async function DashboardPage({ searchParams }: Props) {
     totalNetWeight += sNw;
     totalSpend += sVal;
 
-    // Safe Trend grouping
+    // --- Trend Grouping Logic ---
+    // Fix: If today, week, or month -> group by DAY (YYYY-MM-DD) so "This Month" shows a day-by-day progression curve!
     const bDate = safeParseDate(s.bookingDate) || new Date();
     let sortKey = `${bDate.getFullYear()}-${String(bDate.getMonth() + 1).padStart(2, '0')}`;
     let displayLabel = bDate.toLocaleString('default', { month: 'short', year: '2-digit' });
 
-    if (dateRange === 'today' || dateRange === 'week') {
+    if (dateRange === 'today' || dateRange === 'week' || dateRange === 'month') {
       sortKey = `${bDate.getFullYear()}-${String(bDate.getMonth() + 1).padStart(2, '0')}-${String(bDate.getDate()).padStart(2, '0')}`;
       displayLabel = `${String(bDate.getDate()).padStart(2, '0')} ${bDate.toLocaleString('default', { month: 'short' })}`;
     }
 
     if (!trendMap[sortKey]) {
-      trendMap[sortKey] = { label: displayLabel, cbm: 0, value: 0 };
+      trendMap[sortKey] = { label: displayLabel, cbm: 0, value: 0, count: 0 };
     }
     trendMap[sortKey].cbm += sCbm;
     trendMap[sortKey].value += sVal;
+    trendMap[sortKey].count += 1;
 
-    // Forwarder distribution
-    const fName = s.forwarder || 'Unassigned';
-    if (!forwarderMap[fName]) forwarderMap[fName] = { count: 0, cbm: 0, value: 0 };
+    // --- Forwarder Distribution ---
+    const fName = s.forwarder ? s.forwarder.trim() : 'Unassigned';
+    if (!forwarderMap[fName]) forwarderMap[fName] = { count: 0, cbm: 0, kg: 0, value: 0 };
     forwarderMap[fName].count++;
     forwarderMap[fName].cbm += sCbm;
+    forwarderMap[fName].kg += sGw;
     forwarderMap[fName].value += sVal;
 
-    // Incoterm distribution
-    const iTerm = s.incoterm || 'N/A';
-    incotermMap[iTerm] = (incotermMap[iTerm] || 0) + sVal;
+    // --- Incoterm Distribution ---
+    const iTerm = s.incoterm ? s.incoterm.trim() : 'N/A';
+    if (!incotermMap[iTerm]) incotermMap[iTerm] = { count: 0, cbm: 0, kg: 0, value: 0 };
+    incotermMap[iTerm].count++;
+    incotermMap[iTerm].cbm += sCbm;
+    incotermMap[iTerm].kg += sGw;
+    incotermMap[iTerm].value += sVal;
 
-    // Mode distribution
-    const sMode = s.shipmentMode || 'Other';
-    if (sMode.includes('FCL')) modeMap['Sea FCL']++;
-    else if (sMode.includes('LCL')) modeMap['Sea LCL']++;
-    else if (sMode.toLowerCase().includes('air')) modeMap['Air']++;
-    else modeMap['Other']++;
+    // --- Mode Distribution ---
+    const sMode = s.shipmentMode ? s.shipmentMode.trim().toUpperCase() : 'OTHER';
+    if (!modeMap[sMode]) modeMap[sMode] = { count: 0, cbm: 0, kg: 0, value: 0 };
+    modeMap[sMode].count++;
+    modeMap[sMode].cbm += sCbm;
+    modeMap[sMode].kg += sGw;
+    modeMap[sMode].value += sVal;
 
-    // Customer spend
-    const cName = s.customerName || 'Unknown';
-    if (!customerSpendMap[cName]) customerSpendMap[cName] = { count: 0, value: 0, cbm: 0 };
-    customerSpendMap[cName].count++;
-    customerSpendMap[cName].value += sVal;
-    customerSpendMap[cName].cbm += sCbm;
-
-    // Port
-    if (s.port) portMap[s.port] = (portMap[s.port] || 0) + 1;
+    // --- Customer Distribution ---
+    const cName = s.customerName ? s.customerName.trim() : 'Unknown';
+    if (!customerMap[cName]) customerMap[cName] = { count: 0, cbm: 0, kg: 0, value: 0 };
+    customerMap[cName].count++;
+    customerMap[cName].cbm += sCbm;
+    customerMap[cName].kg += sGw;
+    customerMap[cName].value += sVal;
   }
 
-  // Trend Chart data
+  // --- Prepare Datasets for Charts ---
+  // Trend
   const sortedTrendKeys = Object.keys(trendMap).sort();
   const trendLabels = sortedTrendKeys.map((k) => trendMap[k].label);
   const trendCbms = sortedTrendKeys.map((k) => trendMap[k].cbm);
   const trendValues = sortedTrendKeys.map((k) => trendMap[k].value);
-
-  // Top Forwarders
-  const topForwarderEntries = Object.entries(forwarderMap)
-    .sort((a, b) => b[1].cbm - a[1].cbm)
-    .slice(0, 6);
-  const forwarderLabels = topForwarderEntries.map((e) => e[0]);
-  const forwarderCbms = topForwarderEntries.map((e) => e[1].cbm);
-  const forwarderCounts = topForwarderEntries.map((e) => e[1].count);
+  const trendCounts = sortedTrendKeys.map((k) => trendMap[k].count);
 
   // Incoterms
   const incotermLabels = Object.keys(incotermMap);
-  const incotermValues = Object.values(incotermMap);
+  const incotermData: IncotermDataMap = {
+    labels: incotermLabels,
+    cbm: incotermLabels.map((l) => incotermMap[l].cbm),
+    kg: incotermLabels.map((l) => incotermMap[l].kg),
+    value: incotermLabels.map((l) => incotermMap[l].value),
+    count: incotermLabels.map((l) => incotermMap[l].count),
+  };
 
-  // Top Customers
-  const topCustomers = Object.entries(customerSpendMap)
-    .sort((a, b) => b[1].value - a[1].value)
-    .slice(0, 5);
+  // Forwarders
+  const forwarderRecords: ForwarderRecord[] = Object.entries(forwarderMap).map(([name, data]) => ({
+    name,
+    ...data,
+  }));
+
+  // Modes
+  const modeRecords: ModeRecord[] = Object.entries(modeMap).map(([name, data]) => ({
+    name,
+    ...data,
+  }));
+
+  // Customers
+  const customerRecords: CustomerRecord[] = Object.entries(customerMap).map(([name, data]) => ({
+    name,
+    ...data,
+  }));
+
+  // Top 5 High-Value Customer accounts for summary cards
+  const topCustomers = [...customerRecords].sort((a, b) => b.value - a.value).slice(0, 5);
 
   // Financial Liquidity Strip calculation
   const totalLcOrig = activeLcs.reduce((acc, lc) => acc + Number(lc.originalValue || 0), 0);
@@ -295,7 +322,6 @@ export default async function DashboardPage({ searchParams }: Props) {
 
   const lcBalance = Math.max(0, totalLcOrig - totalLcUsed);
   const ttBalance = Math.max(0, totalTtOrig - totalTtUsed);
-
   const upcomingCbm = upcomingForecasts.reduce((acc, u) => acc + Number(u.cbm || 0), 0);
 
   const hasActiveFilters = Boolean(
@@ -310,7 +336,7 @@ export default async function DashboardPage({ searchParams }: Props) {
 
   return (
     <Shell user={user}>
-      <div className="w-full h-full flex flex-col gap-4 overflow-y-auto custom-scrollbar pr-1">
+      <div className="w-full h-full flex flex-col gap-4 overflow-y-auto custom-scrollbar pr-1 pb-6">
         {/* Network / Latency Alert Banner */}
         {dbError && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-center justify-between text-xs text-amber-800 shadow-xs">
@@ -628,91 +654,91 @@ export default async function DashboardPage({ searchParams }: Props) {
 
         {/* 4. Modern Analytics Visualizations */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 shrink-0">
-          {/* Volume & Spend Run-Rate Trend */}
-          <div className="lg:col-span-8 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[340px]">
+          {/* Row 1, Col 1: Trend Analysis (Renamed + Added Shipment Count) */}
+          <div className="lg:col-span-8 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-bold text-gray-800 tracking-tight flex items-center gap-2">
-                  <i className="fas fa-chart-line text-indigo-600"></i> Cargo Volume &amp; Spend Run-Rate
+                  <i className="fas fa-chart-line text-indigo-600"></i> Trend Analysis
                 </h3>
-                <p className="text-xs text-gray-500">Monthly dual-axis trajectory comparing CBM and USD Value</p>
+                <p className="text-xs text-gray-500">
+                  {dateRange === 'month'
+                    ? 'Daily timeline trajectory comparing CBM, USD Value, and Shipment Count'
+                    : 'Timeline progression comparing Cargo Volume (CBM), Invoiced Value (USD), and Shipment Count'}
+                </p>
               </div>
             </div>
-            <div className="flex-1 min-h-[250px] relative">
-              <TrendChart labels={trendLabels} cbms={trendCbms} values={trendValues} />
-            </div>
-          </div>
-
-          {/* Incoterm Risk & Cost Distribution */}
-          <div className="lg:col-span-4 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[340px]">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-bold text-gray-800 tracking-tight flex items-center gap-2">
-                  <i className="fas fa-shield-halved text-emerald-600"></i> Incoterm Value Share
-                </h3>
-                <p className="text-xs text-gray-500">Commercial terms cost &amp; liability split</p>
-              </div>
-            </div>
-            <div className="flex-1 min-h-[250px] relative flex items-center justify-center">
-              {incotermValues.length === 0 ? (
-                <p className="text-xs text-gray-400 italic">No incoterm data recorded.</p>
+            <div className="flex-1 min-h-[260px] relative">
+              {trendLabels.length === 0 ? (
+                <p className="text-xs text-gray-400 italic text-center py-16">No shipment records in selection.</p>
               ) : (
-                <IncotermDonutChart labels={incotermLabels} values={incotermValues} />
+                <TrendChart
+                  labels={trendLabels}
+                  cbms={trendCbms}
+                  values={trendValues}
+                  counts={trendCounts}
+                />
               )}
             </div>
           </div>
 
-          {/* Forwarder Performance Matrix */}
-          <div className="lg:col-span-6 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[300px]">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-bold text-gray-800 tracking-tight flex items-center gap-2">
-                  <i className="fas fa-dolly text-sky-600"></i> Top Forwarders (Volume &amp; Frequency)
-                </h3>
-                <p className="text-xs text-gray-500">Cargo volume handle comparison by forwarder</p>
-              </div>
-            </div>
-            <div className="flex-1 min-h-[220px] relative">
-              {forwarderLabels.length === 0 ? (
-                <p className="text-xs text-gray-400 italic text-center py-12">No forwarder data in selection.</p>
-              ) : (
-                <ForwarderMatrixChart labels={forwarderLabels} cbms={forwarderCbms} counts={forwarderCounts} />
-              )}
-            </div>
+          {/* Row 1, Col 2: Incoterm Distribution (Interactive with CBM, KG, Value, Count) */}
+          <div className="lg:col-span-4 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
+            <InteractiveIncotermChart data={incotermData} />
           </div>
 
-          {/* Top 5 High-Value Customers */}
-          <div className="lg:col-span-6 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[300px]">
+          {/* Row 2, Col 1: Top Forwarders (Interactive with CBM, KG, Value, Count) */}
+          <div className="lg:col-span-6 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[340px]">
+            <InteractiveForwarderChart forwarders={forwarderRecords} />
+          </div>
+
+          {/* Row 2, Col 2: Shipment Modes (NEW CHART! with Count, Value, KG, CBM) */}
+          <div className="lg:col-span-6 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[340px]">
+            <InteractiveModeChart modes={modeRecords} />
+          </div>
+
+          {/* Row 3, Col 1: Top Customers Chart (NEW INTERACTIVE CHART! with Value, CBM, KG, Count) */}
+          <div className="lg:col-span-7 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
+            <InteractiveCustomerChart customers={customerRecords} />
+          </div>
+
+          {/* Row 3, Col 2: Top 5 High-Value Client Account Summary Cards */}
+          <div className="lg:col-span-5 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-bold text-gray-800 tracking-tight flex items-center gap-2">
-                  <i className="fas fa-trophy text-amber-500"></i> Top Volume &amp; Value Clients
+                  <i className="fas fa-medal text-indigo-600"></i> Leading Accounts Summary
                 </h3>
-                <p className="text-xs text-gray-500">Leading accounts by invoiced shipment value</p>
+                <p className="text-xs text-gray-500">Highest invoiced value distribution</p>
               </div>
             </div>
             <div className="flex-1 space-y-2.5 overflow-y-auto custom-scrollbar">
               {topCustomers.length === 0 ? (
                 <p className="text-xs text-gray-400 italic text-center py-12">No customer records in selection.</p>
               ) : (
-                topCustomers.map(([cName, cData], idx) => {
-                  const pct = totalSpend > 0 ? Math.round((cData.value / totalSpend) * 100) : 0;
+                topCustomers.map((cust, idx) => {
+                  const pct = totalSpend > 0 ? Math.round((cust.value / totalSpend) * 100) : 0;
                   return (
-                    <div key={cName} className="p-3 bg-gray-50 rounded-xl border border-gray-100 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center">
+                    <div
+                      key={cust.name}
+                      className="p-3 bg-gray-50 hover:bg-gray-100/80 transition-colors rounded-xl border border-gray-100 flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center shrink-0">
                           {idx + 1}
                         </span>
-                        <div>
-                          <p className="text-xs font-bold text-gray-800">{cName}</p>
-                          <p className="text-xs text-gray-500">
-                            {cData.count} Shipments • {cData.cbm.toFixed(2)} CBM
+                        <div className="truncate">
+                          <p className="text-xs font-bold text-gray-800 truncate" title={cust.name}>
+                            {cust.name}
+                          </p>
+                          <p className="text-[11px] text-gray-500">
+                            {cust.count} Shipments • {cust.cbm.toFixed(2)} CBM • {Math.round(cust.kg).toLocaleString()} KG
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right shrink-0 pl-2">
                         <p className="text-xs font-bold text-gray-900">
-                          ${cData.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          ${cust.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                         </p>
                         <p className="text-[10px] text-emerald-600 font-semibold">{pct}% of spend</p>
                       </div>
