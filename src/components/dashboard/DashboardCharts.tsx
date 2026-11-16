@@ -58,17 +58,19 @@ export function MetricSelector({
   );
 }
 
-// --- 1. Modern Trend Analysis Chart (CBM, Value, Shipment Count) ---
+// --- 1. Trend Analysis Chart (Dual-Axis: Cargo Volume CBM & Invoiced Value USD) ---
 interface TrendChartProps {
   labels: string[];
   cbms: number[];
   values: number[];
-  counts: number[];
 }
 
-export function TrendChart({ labels, cbms, values, counts }: TrendChartProps) {
+export function TrendChart({ labels, cbms, values }: TrendChartProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstanceRef = useRef<Chart | null>(null);
+
+  const totalVal = useMemo(() => values.reduce((a, b) => a + b, 0), [values]);
+  const totalCbm = useMemo(() => cbms.reduce((a, b) => a + b, 0), [cbms]);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -85,10 +87,6 @@ export function TrendChart({ labels, cbms, values, counts }: TrendChartProps) {
     const cbmGradient = ctx.createLinearGradient(0, 0, 0, 300);
     cbmGradient.addColorStop(0, 'rgba(16, 185, 129, 0.25)');
     cbmGradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
-
-    const countGradient = ctx.createLinearGradient(0, 0, 0, 300);
-    countGradient.addColorStop(0, 'rgba(245, 158, 11, 0.20)');
-    countGradient.addColorStop(1, 'rgba(245, 158, 11, 0.0)');
 
     chartInstanceRef.current = new Chart(canvasRef.current, {
       type: 'line',
@@ -125,22 +123,6 @@ export function TrendChart({ labels, cbms, values, counts }: TrendChartProps) {
             fill: true,
             yAxisID: 'y',
           },
-          {
-            label: 'Shipment Count',
-            data: counts,
-            borderColor: '#f59e0b',
-            backgroundColor: countGradient,
-            borderWidth: 2,
-            borderDash: [4, 4],
-            pointBackgroundColor: '#f59e0b',
-            pointBorderColor: '#ffffff',
-            pointBorderWidth: 2,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            tension: 0.35,
-            fill: false,
-            yAxisID: 'y2',
-          },
         ],
       },
       options: {
@@ -168,13 +150,13 @@ export function TrendChart({ labels, cbms, values, counts }: TrendChartProps) {
             bodyFont: { size: 11 },
             callbacks: {
               label: (item) => {
+                const raw = Number(item.raw || 0);
                 if (item.datasetIndex === 0) {
-                  return ` Value: $${Number(item.raw).toLocaleString()}`;
+                  const pct = totalVal > 0 ? ` (${((raw / totalVal) * 100).toFixed(1)}%)` : '';
+                  return ` Value: $${raw.toLocaleString()}${pct}`;
                 }
-                if (item.datasetIndex === 1) {
-                  return ` Volume: ${Number(item.raw).toFixed(2)} CBM`;
-                }
-                return ` Count: ${Number(item.raw)} Shipments`;
+                const pct = totalCbm > 0 ? ` (${((raw / totalCbm) * 100).toFixed(1)}%)` : '';
+                return ` Volume: ${raw.toFixed(2)} CBM${pct}`;
               },
             },
           },
@@ -206,18 +188,6 @@ export function TrendChart({ labels, cbms, values, counts }: TrendChartProps) {
               callback: (val) => '$' + Number(val).toLocaleString(),
             },
           },
-          y2: {
-            type: 'linear',
-            display: true,
-            position: 'right',
-            title: { display: true, text: 'Count (Qty)', font: { size: 10, weight: 'bold' } },
-            grid: { display: false },
-            beginAtZero: true,
-            ticks: {
-              precision: 0,
-              font: { size: 10 },
-            },
-          },
         },
       },
     });
@@ -225,12 +195,12 @@ export function TrendChart({ labels, cbms, values, counts }: TrendChartProps) {
     return () => {
       if (chartInstanceRef.current) chartInstanceRef.current.destroy();
     };
-  }, [labels, cbms, values, counts]);
+  }, [labels, cbms, values, totalVal, totalCbm]);
 
   return <canvas ref={canvasRef} />;
 }
 
-// --- 2. Interactive Incoterm Distribution Chart (Donut with CBM, KG, Value, Count) ---
+// --- 2. Interactive Incoterm Distribution Chart (Donut with On-Chart % Labels & % in Tooltips) ---
 export interface IncotermDataMap {
   labels: string[];
   cbm: number[];
@@ -247,6 +217,10 @@ export function InteractiveIncotermChart({ data }: { data: IncotermDataMap }) {
   const activeValues = useMemo(() => {
     return data[metric] || [];
   }, [data, metric]);
+
+  const totalMetricVal = useMemo(() => {
+    return activeValues.reduce((a, b) => a + Number(b || 0), 0);
+  }, [activeValues]);
 
   const metricTitles: Record<MetricType, string> = {
     cbm: 'Incoterm Share by Volume (CBM)',
@@ -276,7 +250,7 @@ export function InteractiveIncotermChart({ data }: { data: IncotermDataMap }) {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: '68%',
+        cutout: '56%',
         plugins: {
           legend: {
             position: 'right',
@@ -287,15 +261,58 @@ export function InteractiveIncotermChart({ data }: { data: IncotermDataMap }) {
               font: { size: 11 },
             },
           },
-          datalabels: { display: false },
+          datalabels: {
+            display: (context) => {
+              const val = Number(context.dataset.data[context.dataIndex] || 0);
+              return totalMetricVal > 0 && (val / totalMetricVal) >= 0.03;
+            },
+            anchor: (context) => {
+              const val = Number(context.dataset.data[context.dataIndex] || 0);
+              const ratio = totalMetricVal > 0 ? val / totalMetricVal : 0;
+              return ratio >= 0.12 ? 'center' : 'end';
+            },
+            align: (context) => {
+              const val = Number(context.dataset.data[context.dataIndex] || 0);
+              const ratio = totalMetricVal > 0 ? val / totalMetricVal : 0;
+              return ratio >= 0.12 ? 'center' : 'end';
+            },
+            offset: (context) => {
+              const val = Number(context.dataset.data[context.dataIndex] || 0);
+              const ratio = totalMetricVal > 0 ? val / totalMetricVal : 0;
+              return ratio >= 0.12 ? 0 : 4;
+            },
+            color: (context) => {
+              const val = Number(context.dataset.data[context.dataIndex] || 0);
+              const ratio = totalMetricVal > 0 ? val / totalMetricVal : 0;
+              return ratio >= 0.12 ? '#ffffff' : '#1e293b';
+            },
+            font: { weight: 'bold', size: 10 },
+            formatter: (val: any) => {
+              if (!totalMetricVal || totalMetricVal === 0) return '';
+              const num = Number(val || 0);
+              const pct = ((num / totalMetricVal) * 100).toFixed(0);
+              let valStr = '';
+              if (metric === 'value') {
+                valStr = num >= 1000 ? `$${(num / 1000).toFixed(1)}k` : `$${num}`;
+              } else if (metric === 'cbm') {
+                valStr = `${num.toFixed(1)}m³`;
+              } else if (metric === 'kg') {
+                valStr = num >= 1000 ? `${(num / 1000).toFixed(1)}t` : `${Math.round(num)}kg`;
+              } else {
+                valStr = `${num}`;
+              }
+              return `${valStr} (${pct}%)`;
+            },
+          },
           tooltip: {
             callbacks: {
               label: (item) => {
                 const raw = Number(item.raw || 0);
-                if (metric === 'value') return ` Value: $${raw.toLocaleString()}`;
-                if (metric === 'cbm') return ` Volume: ${raw.toFixed(2)} CBM`;
-                if (metric === 'kg') return ` Weight: ${raw.toLocaleString()} KG`;
-                return ` Count: ${raw} Shipments`;
+                const pct = totalMetricVal > 0 ? ` (${((raw / totalMetricVal) * 100).toFixed(1)}%)` : '';
+                if (metric === 'value') return ` Value: $${raw.toLocaleString()}${pct}`;
+                if (metric === 'cbm') return ` Volume: ${raw.toFixed(2)} CBM${pct}`;
+                if (metric === 'kg') return ` Weight: ${raw.toLocaleString()} KG${pct}`;
+                return ` Count: ${raw} Shipments${pct}`;
               },
             },
           },
@@ -306,7 +323,7 @@ export function InteractiveIncotermChart({ data }: { data: IncotermDataMap }) {
     return () => {
       if (chartInstanceRef.current) chartInstanceRef.current.destroy();
     };
-  }, [data.labels, activeValues, metric]);
+  }, [data.labels, activeValues, metric, totalMetricVal]);
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -330,7 +347,7 @@ export function InteractiveIncotermChart({ data }: { data: IncotermDataMap }) {
   );
 }
 
-// --- 3. Interactive Top Forwarders Chart (Horizontal Bar with CBM, KG, Value, Count) ---
+// --- 3. Interactive Top Forwarders Chart (Horizontal Bar with Data Labels & Tooltip %) ---
 export interface ForwarderRecord {
   name: string;
   cbm: number;
@@ -343,6 +360,10 @@ export function InteractiveForwarderChart({ forwarders }: { forwarders: Forwarde
   const [metric, setMetric] = useState<MetricType>('cbm');
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstanceRef = useRef<Chart | null>(null);
+
+  const grandTotal = useMemo(() => {
+    return forwarders.reduce((sum, f) => sum + Number(f[metric] || 0), 0);
+  }, [forwarders, metric]);
 
   const sortedData = useMemo(() => {
     const list = [...forwarders].sort((a, b) => b[metric] - a[metric]).slice(0, 7);
@@ -384,21 +405,35 @@ export function InteractiveForwarderChart({ forwarders }: { forwarders: Forwarde
         indexAxis: 'y',
         plugins: {
           legend: { display: false },
-          datalabels: { display: false },
+          datalabels: {
+            anchor: 'end',
+            align: 'right',
+            color: '#475569',
+            font: { weight: 'bold', size: 10 },
+            formatter: (val: any) => {
+              const num = Number(val || 0);
+              if (cfg.isVal) return '$' + num.toLocaleString();
+              if (metric === 'cbm') return num.toFixed(2) + ' CBM';
+              if (metric === 'kg') return Math.round(num).toLocaleString() + ' KG';
+              return num + ' Shp';
+            },
+          },
           tooltip: {
             callbacks: {
               label: (item) => {
                 const val = Number(item.raw || 0);
-                if (cfg.isVal) return ` Value: $${val.toLocaleString()}`;
-                if (metric === 'cbm') return ` Volume: ${val.toFixed(2)} CBM`;
-                if (metric === 'kg') return ` Weight: ${val.toLocaleString()} KG`;
-                return ` Count: ${val} Shipments`;
+                const pct = grandTotal > 0 ? ` (${((val / grandTotal) * 100).toFixed(1)}% of total)` : '';
+                if (cfg.isVal) return ` Value: $${val.toLocaleString()}${pct}`;
+                if (metric === 'cbm') return ` Volume: ${val.toFixed(2)} CBM${pct}`;
+                if (metric === 'kg') return ` Weight: ${val.toLocaleString()} KG${pct}`;
+                return ` Count: ${val} Shipments${pct}`;
               },
             },
           },
         },
         scales: {
           x: {
+            grace: '18%', // Extra padding on right so labels never get clipped
             grid: { color: '#f8fafc' },
             ticks: {
               font: { size: 10 },
@@ -417,7 +452,7 @@ export function InteractiveForwarderChart({ forwarders }: { forwarders: Forwarde
     return () => {
       if (chartInstanceRef.current) chartInstanceRef.current.destroy();
     };
-  }, [sortedData, metric]);
+  }, [sortedData, metric, grandTotal]);
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -441,7 +476,7 @@ export function InteractiveForwarderChart({ forwarders }: { forwarders: Forwarde
   );
 }
 
-// --- 4. Interactive Shipment Mode Chart (Donut with Count, Value, KG, CBM) ---
+// --- 4. Interactive Shipment Mode Chart (Donut with On-Chart % Labels & Tooltip %) ---
 export interface ModeRecord {
   name: string;
   cbm: number;
@@ -458,6 +493,10 @@ export function InteractiveModeChart({ modes }: { modes: ModeRecord[] }) {
   const activeValues = useMemo(() => {
     return modes.map((m) => m[metric]);
   }, [modes, metric]);
+
+  const totalModeVal = useMemo(() => {
+    return activeValues.reduce((a, b) => a + Number(b || 0), 0);
+  }, [activeValues]);
 
   const metricTitles: Record<MetricType, string> = {
     count: 'Distribution by Shipment Frequency',
@@ -487,7 +526,7 @@ export function InteractiveModeChart({ modes }: { modes: ModeRecord[] }) {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        cutout: '65%',
+        cutout: '56%',
         plugins: {
           legend: {
             position: 'right',
@@ -498,15 +537,58 @@ export function InteractiveModeChart({ modes }: { modes: ModeRecord[] }) {
               font: { size: 11 },
             },
           },
-          datalabels: { display: false },
+          datalabels: {
+            display: (context) => {
+              const val = Number(context.dataset.data[context.dataIndex] || 0);
+              return totalModeVal > 0 && (val / totalModeVal) >= 0.03;
+            },
+            anchor: (context) => {
+              const val = Number(context.dataset.data[context.dataIndex] || 0);
+              const ratio = totalModeVal > 0 ? val / totalModeVal : 0;
+              return ratio >= 0.12 ? 'center' : 'end';
+            },
+            align: (context) => {
+              const val = Number(context.dataset.data[context.dataIndex] || 0);
+              const ratio = totalModeVal > 0 ? val / totalModeVal : 0;
+              return ratio >= 0.12 ? 'center' : 'end';
+            },
+            offset: (context) => {
+              const val = Number(context.dataset.data[context.dataIndex] || 0);
+              const ratio = totalModeVal > 0 ? val / totalModeVal : 0;
+              return ratio >= 0.12 ? 0 : 4;
+            },
+            color: (context) => {
+              const val = Number(context.dataset.data[context.dataIndex] || 0);
+              const ratio = totalModeVal > 0 ? val / totalModeVal : 0;
+              return ratio >= 0.12 ? '#ffffff' : '#1e293b';
+            },
+            font: { weight: 'bold', size: 10 },
+            formatter: (val: any) => {
+              if (!totalModeVal || totalModeVal === 0) return '';
+              const num = Number(val || 0);
+              const pct = ((num / totalModeVal) * 100).toFixed(0);
+              let valStr = '';
+              if (metric === 'value') {
+                valStr = num >= 1000 ? `$${(num / 1000).toFixed(1)}k` : `$${num}`;
+              } else if (metric === 'cbm') {
+                valStr = `${num.toFixed(1)}m³`;
+              } else if (metric === 'kg') {
+                valStr = num >= 1000 ? `${(num / 1000).toFixed(1)}t` : `${Math.round(num)}kg`;
+              } else {
+                valStr = `${num}`;
+              }
+              return `${valStr} (${pct}%)`;
+            },
+          },
           tooltip: {
             callbacks: {
               label: (item) => {
                 const raw = Number(item.raw || 0);
-                if (metric === 'value') return ` Value: $${raw.toLocaleString()}`;
-                if (metric === 'cbm') return ` Volume: ${raw.toFixed(2)} CBM`;
-                if (metric === 'kg') return ` Weight: ${raw.toLocaleString()} KG`;
-                return ` Count: ${raw} Shipments`;
+                const pct = totalModeVal > 0 ? ` (${((raw / totalModeVal) * 100).toFixed(1)}%)` : '';
+                if (metric === 'value') return ` Value: $${raw.toLocaleString()}${pct}`;
+                if (metric === 'cbm') return ` Volume: ${raw.toFixed(2)} CBM${pct}`;
+                if (metric === 'kg') return ` Weight: ${raw.toLocaleString()} KG${pct}`;
+                return ` Count: ${raw} Shipments${pct}`;
               },
             },
           },
@@ -517,7 +599,7 @@ export function InteractiveModeChart({ modes }: { modes: ModeRecord[] }) {
     return () => {
       if (chartInstanceRef.current) chartInstanceRef.current.destroy();
     };
-  }, [modes, activeValues, metric]);
+  }, [modes, activeValues, metric, totalModeVal]);
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -541,7 +623,7 @@ export function InteractiveModeChart({ modes }: { modes: ModeRecord[] }) {
   );
 }
 
-// --- 5. Interactive Top Customers Chart (Bar with Value, CBM, KG, Count) ---
+// --- 5. Interactive Top Customers Chart (Horizontal Bar with Data Labels & Tooltip %) ---
 export interface CustomerRecord {
   name: string;
   cbm: number;
@@ -554,6 +636,10 @@ export function InteractiveCustomerChart({ customers }: { customers: CustomerRec
   const [metric, setMetric] = useState<MetricType>('value');
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstanceRef = useRef<Chart | null>(null);
+
+  const grandTotal = useMemo(() => {
+    return customers.reduce((sum, c) => sum + Number(c[metric] || 0), 0);
+  }, [customers, metric]);
 
   const sortedData = useMemo(() => {
     const list = [...customers].sort((a, b) => b[metric] - a[metric]).slice(0, 7);
@@ -595,21 +681,35 @@ export function InteractiveCustomerChart({ customers }: { customers: CustomerRec
         indexAxis: 'y',
         plugins: {
           legend: { display: false },
-          datalabels: { display: false },
+          datalabels: {
+            anchor: 'end',
+            align: 'right',
+            color: '#475569',
+            font: { weight: 'bold', size: 10 },
+            formatter: (val: any) => {
+              const num = Number(val || 0);
+              if (cfg.isVal) return '$' + num.toLocaleString();
+              if (metric === 'cbm') return num.toFixed(2) + ' CBM';
+              if (metric === 'kg') return Math.round(num).toLocaleString() + ' KG';
+              return num + ' Shp';
+            },
+          },
           tooltip: {
             callbacks: {
               label: (item) => {
                 const val = Number(item.raw || 0);
-                if (cfg.isVal) return ` Value: $${val.toLocaleString()}`;
-                if (metric === 'cbm') return ` Volume: ${val.toFixed(2)} CBM`;
-                if (metric === 'kg') return ` Weight: ${val.toLocaleString()} KG`;
-                return ` Count: ${val} Shipments`;
+                const pct = grandTotal > 0 ? ` (${((val / grandTotal) * 100).toFixed(1)}% of total)` : '';
+                if (cfg.isVal) return ` Value: $${val.toLocaleString()}${pct}`;
+                if (metric === 'cbm') return ` Volume: ${val.toFixed(2)} CBM${pct}`;
+                if (metric === 'kg') return ` Weight: ${val.toLocaleString()} KG${pct}`;
+                return ` Count: ${val} Shipments${pct}`;
               },
             },
           },
         },
         scales: {
           x: {
+            grace: '18%', // Extra right margin so data labels are never cut off
             grid: { color: '#f8fafc' },
             ticks: {
               font: { size: 10 },
@@ -628,7 +728,7 @@ export function InteractiveCustomerChart({ customers }: { customers: CustomerRec
     return () => {
       if (chartInstanceRef.current) chartInstanceRef.current.destroy();
     };
-  }, [sortedData, metric]);
+  }, [sortedData, metric, grandTotal]);
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -650,37 +750,6 @@ export function InteractiveCustomerChart({ customers }: { customers: CustomerRec
       </div>
     </div>
   );
-}
-
-// --- Backwards Compatibility Wrappers ---
-export function ForwarderMatrixChart({
-  labels,
-  cbms,
-  counts,
-}: {
-  labels: string[];
-  cbms: number[];
-  counts: number[];
-}) {
-  const fws = labels.map((l, i) => ({
-    name: l,
-    cbm: cbms[i] || 0,
-    kg: 0,
-    value: 0,
-    count: counts[i] || 0,
-  }));
-  return <InteractiveForwarderChart forwarders={fws} />;
-}
-
-export function IncotermDonutChart({ labels, values }: { labels: string[]; values: number[] }) {
-  const data: IncotermDataMap = {
-    labels,
-    value: values,
-    cbm: [],
-    kg: [],
-    count: [],
-  };
-  return <InteractiveIncotermChart data={data} />;
 }
 
 // --- Dynamic Widget Chart (For Admin Customizable Widgets) ---
@@ -789,45 +858,6 @@ export function DynamicWidgetChart({ widget, dataObj, colorIndex = 0 }: DynamicW
               labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { size: 10 } },
             },
             datalabels: { display: false },
-          },
-        },
-      });
-    } else if (widget.type === 'list') {
-      chartInstanceRef.current = new Chart(canvasRef.current, {
-        type: 'bar',
-        data: {
-          labels: dataObj.labels,
-          datasets: [
-            {
-              label: metricLabel,
-              data: metricArr,
-              backgroundColor: color,
-              borderRadius: 4,
-            },
-          ],
-        },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          scales: {
-            x: {
-              border: { dash: [3, 3] },
-              grid: { color: '#f1f5f9' },
-              beginAtZero: true,
-              ticks: { font: { size: 10 } },
-            },
-            y: { grid: { display: false }, ticks: { font: { size: 10, weight: 'bold' } } },
-          },
-          plugins: {
-            legend: { display: false },
-            datalabels: {
-              anchor: 'end',
-              align: 'right',
-              color: '#64748b',
-              font: { size: 9 },
-              formatter: (val: any) => (isVal ? '$' + Number(val).toLocaleString() : val),
-            },
           },
         },
       });

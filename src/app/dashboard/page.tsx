@@ -654,7 +654,7 @@ export default async function DashboardPage({ searchParams }: Props) {
 
         {/* 4. Modern Analytics Visualizations */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 shrink-0">
-          {/* Row 1, Col 1: Trend Analysis (Renamed + Added Shipment Count) */}
+          {/* Row 1, Col 1: Trend Analysis (Dual-Axis: Cargo Volume CBM & Invoiced USD Value) */}
           <div className="lg:col-span-8 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -663,8 +663,8 @@ export default async function DashboardPage({ searchParams }: Props) {
                 </h3>
                 <p className="text-xs text-gray-500">
                   {dateRange === 'month'
-                    ? 'Daily timeline trajectory comparing CBM, USD Value, and Shipment Count'
-                    : 'Timeline progression comparing Cargo Volume (CBM), Invoiced Value (USD), and Shipment Count'}
+                    ? 'Daily timeline trajectory comparing Cargo Volume (CBM) and Invoiced Value (USD)'
+                    : 'Timeline progression comparing Cargo Volume (CBM) and Invoiced Value (USD)'}
                 </p>
               </div>
             </div>
@@ -676,7 +676,6 @@ export default async function DashboardPage({ searchParams }: Props) {
                   labels={trendLabels}
                   cbms={trendCbms}
                   values={trendValues}
-                  counts={trendCounts}
                 />
               )}
             </div>
@@ -688,22 +687,22 @@ export default async function DashboardPage({ searchParams }: Props) {
           </div>
 
           {/* Row 2, Col 1: Top Forwarders (Interactive with CBM, KG, Value, Count) */}
-          <div className="lg:col-span-6 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[340px]">
+          <div className="lg:col-span-6 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
             <InteractiveForwarderChart forwarders={forwarderRecords} />
           </div>
 
-          {/* Row 2, Col 2: Shipment Modes (NEW CHART! with Count, Value, KG, CBM) */}
-          <div className="lg:col-span-6 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[340px]">
-            <InteractiveModeChart modes={modeRecords} />
-          </div>
-
-          {/* Row 3, Col 1: Top Customers Chart (NEW INTERACTIVE CHART! with Value, CBM, KG, Count) */}
-          <div className="lg:col-span-7 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
+          {/* Row 2, Col 2: Top Customers Chart (Interactive with Value, CBM, KG, Count) */}
+          <div className="lg:col-span-6 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
             <InteractiveCustomerChart customers={customerRecords} />
           </div>
 
-          {/* Row 3, Col 2: Top 5 High-Value Client Account Summary Cards */}
+          {/* Row 3, Col 1: Shipment Modes (Interactive with Count, Value, KG, CBM) - Separated from Incoterm */}
           <div className="lg:col-span-5 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
+            <InteractiveModeChart modes={modeRecords} />
+          </div>
+
+          {/* Row 3, Col 2: Top High-Value Client Account Summary Cards */}
+          <div className="lg:col-span-7 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-bold text-gray-800 tracking-tight flex items-center gap-2">
