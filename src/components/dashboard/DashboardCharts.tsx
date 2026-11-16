@@ -269,39 +269,29 @@ export function InteractiveIncotermChart({ data }: { data: IncotermDataMap }) {
             anchor: (context) => {
               const val = Number(context.dataset.data[context.dataIndex] || 0);
               const ratio = totalMetricVal > 0 ? val / totalMetricVal : 0;
-              return ratio >= 0.12 ? 'center' : 'end';
+              return ratio >= 0.08 ? 'center' : 'end';
             },
             align: (context) => {
               const val = Number(context.dataset.data[context.dataIndex] || 0);
               const ratio = totalMetricVal > 0 ? val / totalMetricVal : 0;
-              return ratio >= 0.12 ? 'center' : 'end';
+              return ratio >= 0.08 ? 'center' : 'end';
             },
             offset: (context) => {
               const val = Number(context.dataset.data[context.dataIndex] || 0);
               const ratio = totalMetricVal > 0 ? val / totalMetricVal : 0;
-              return ratio >= 0.12 ? 0 : 4;
+              return ratio >= 0.08 ? 0 : 4;
             },
             color: (context) => {
               const val = Number(context.dataset.data[context.dataIndex] || 0);
               const ratio = totalMetricVal > 0 ? val / totalMetricVal : 0;
-              return ratio >= 0.12 ? '#ffffff' : '#1e293b';
+              return ratio >= 0.08 ? '#ffffff' : '#1e293b';
             },
             font: { weight: 'bold', size: 10 },
             formatter: (val: any) => {
               if (!totalMetricVal || totalMetricVal === 0) return '';
               const num = Number(val || 0);
-              const pct = ((num / totalMetricVal) * 100).toFixed(0);
-              let valStr = '';
-              if (metric === 'value') {
-                valStr = num >= 1000 ? `$${(num / 1000).toFixed(1)}k` : `$${num}`;
-              } else if (metric === 'cbm') {
-                valStr = `${num.toFixed(1)}m³`;
-              } else if (metric === 'kg') {
-                valStr = num >= 1000 ? `${(num / 1000).toFixed(1)}t` : `${Math.round(num)}kg`;
-              } else {
-                valStr = `${num}`;
-              }
-              return `${valStr} (${pct}%)`;
+              const pct = ((num / totalMetricVal) * 100).toFixed(1);
+              return `${pct}%`;
             },
           },
           tooltip: {
@@ -420,6 +410,10 @@ export function InteractiveForwarderChart({ forwarders }: { forwarders: Forwarde
           },
           tooltip: {
             callbacks: {
+              title: (items) => {
+                if (!items.length) return '';
+                return sortedData.labels[items[0].dataIndex] || '';
+              },
               label: (item) => {
                 const val = Number(item.raw || 0);
                 const pct = grandTotal > 0 ? ` (${((val / grandTotal) * 100).toFixed(1)}% of total)` : '';
@@ -443,7 +437,20 @@ export function InteractiveForwarderChart({ forwarders }: { forwarders: Forwarde
           },
           y: {
             grid: { display: false },
-            ticks: { font: { size: 11, weight: 'bold' } },
+            ticks: {
+              font: { size: 10.5, weight: 'bold' },
+              color: '#334155',
+              callback: function (val) {
+                const label = this.getLabelForValue(val as number);
+                if (typeof label === 'string' && label.length > 20) {
+                  return label.substring(0, 19) + '…';
+                }
+                return label;
+              },
+            },
+            afterFit: (axis) => {
+              axis.width = 160; // Fixed width across all metric filters
+            },
           },
         },
       },
@@ -545,39 +552,29 @@ export function InteractiveModeChart({ modes }: { modes: ModeRecord[] }) {
             anchor: (context) => {
               const val = Number(context.dataset.data[context.dataIndex] || 0);
               const ratio = totalModeVal > 0 ? val / totalModeVal : 0;
-              return ratio >= 0.12 ? 'center' : 'end';
+              return ratio >= 0.08 ? 'center' : 'end';
             },
             align: (context) => {
               const val = Number(context.dataset.data[context.dataIndex] || 0);
               const ratio = totalModeVal > 0 ? val / totalModeVal : 0;
-              return ratio >= 0.12 ? 'center' : 'end';
+              return ratio >= 0.08 ? 'center' : 'end';
             },
             offset: (context) => {
               const val = Number(context.dataset.data[context.dataIndex] || 0);
               const ratio = totalModeVal > 0 ? val / totalModeVal : 0;
-              return ratio >= 0.12 ? 0 : 4;
+              return ratio >= 0.08 ? 0 : 4;
             },
             color: (context) => {
               const val = Number(context.dataset.data[context.dataIndex] || 0);
               const ratio = totalModeVal > 0 ? val / totalModeVal : 0;
-              return ratio >= 0.12 ? '#ffffff' : '#1e293b';
+              return ratio >= 0.08 ? '#ffffff' : '#1e293b';
             },
             font: { weight: 'bold', size: 10 },
             formatter: (val: any) => {
               if (!totalModeVal || totalModeVal === 0) return '';
               const num = Number(val || 0);
-              const pct = ((num / totalModeVal) * 100).toFixed(0);
-              let valStr = '';
-              if (metric === 'value') {
-                valStr = num >= 1000 ? `$${(num / 1000).toFixed(1)}k` : `$${num}`;
-              } else if (metric === 'cbm') {
-                valStr = `${num.toFixed(1)}m³`;
-              } else if (metric === 'kg') {
-                valStr = num >= 1000 ? `${(num / 1000).toFixed(1)}t` : `${Math.round(num)}kg`;
-              } else {
-                valStr = `${num}`;
-              }
-              return `${valStr} (${pct}%)`;
+              const pct = ((num / totalModeVal) * 100).toFixed(1);
+              return `${pct}%`;
             },
           },
           tooltip: {
@@ -696,6 +693,10 @@ export function InteractiveCustomerChart({ customers }: { customers: CustomerRec
           },
           tooltip: {
             callbacks: {
+              title: (items) => {
+                if (!items.length) return '';
+                return sortedData.labels[items[0].dataIndex] || '';
+              },
               label: (item) => {
                 const val = Number(item.raw || 0);
                 const pct = grandTotal > 0 ? ` (${((val / grandTotal) * 100).toFixed(1)}% of total)` : '';
@@ -719,7 +720,20 @@ export function InteractiveCustomerChart({ customers }: { customers: CustomerRec
           },
           y: {
             grid: { display: false },
-            ticks: { font: { size: 11, weight: 'bold' } },
+            ticks: {
+              font: { size: 10.5, weight: 'bold' },
+              color: '#334155',
+              callback: function (val) {
+                const label = this.getLabelForValue(val as number);
+                if (typeof label === 'string' && label.length > 20) {
+                  return label.substring(0, 19) + '…';
+                }
+                return label;
+              },
+            },
+            afterFit: (axis) => {
+              axis.width = 160; // Fixed width across all metric filters
+            },
           },
         },
       },

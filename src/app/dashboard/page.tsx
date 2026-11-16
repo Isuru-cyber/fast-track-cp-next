@@ -691,18 +691,8 @@ export default async function DashboardPage({ searchParams }: Props) {
             <InteractiveForwarderChart forwarders={forwarderRecords} />
           </div>
 
-          {/* Row 2, Col 2: Top Customers Chart (Interactive with Value, CBM, KG, Count) */}
+          {/* Row 2, Col 2: Leading Accounts Summary (Top High-Value Client Account Summary Cards) */}
           <div className="lg:col-span-6 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
-            <InteractiveCustomerChart customers={customerRecords} />
-          </div>
-
-          {/* Row 3, Col 1: Shipment Modes (Interactive with Count, Value, KG, CBM) - Separated from Incoterm */}
-          <div className="lg:col-span-5 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
-            <InteractiveModeChart modes={modeRecords} />
-          </div>
-
-          {/* Row 3, Col 2: Top High-Value Client Account Summary Cards */}
-          <div className="lg:col-span-7 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-sm font-bold text-gray-800 tracking-tight flex items-center gap-2">
@@ -746,6 +736,16 @@ export default async function DashboardPage({ searchParams }: Props) {
                 })
               )}
             </div>
+          </div>
+
+          {/* Row 3, Col 1: Shipment Modes (Interactive with Count, Value, KG, CBM) */}
+          <div className="lg:col-span-5 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
+            <InteractiveModeChart modes={modeRecords} />
+          </div>
+
+          {/* Row 3, Col 2: Top Accounts Overview Chart (Interactive with Value, CBM, KG, Count) */}
+          <div className="lg:col-span-7 bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[350px]">
+            <InteractiveCustomerChart customers={customerRecords} />
           </div>
         </div>
       </div>
